@@ -1,21 +1,15 @@
 #include "image_io.h"
-#include <iostream>
 #include <fstream>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <iostream>
 
-// Allocates memory aligned to 64 bytes for RISC-V Vector compatibility
 Image allocate_image(int width, int height) {
-    Image img;
-    img.width = width;
-    img.height = height;
-    // aligned_alloc requires the size to be a multiple of the alignment
+    Image img = {nullptr, width, height};
     size_t size = (static_cast<size_t>(width * height) + 63) & ~63;
     img.data = static_cast<uint8_t*>(aligned_alloc(64, size));
-    
-    if (img.data == nullptr) {
-        std::cerr << "Error: Memory allocation failed." << std::endl;
-    }
+    if (!img.data) std::cerr << "Memory allocation failed.\n";
     return img;
 }
 
@@ -26,36 +20,49 @@ void free_image(Image& img) {
     }
 }
 
+// Fixed: Added load_raw_image back in
 bool load_raw_image(const std::string& filename, Image& img) {
     std::ifstream file(filename, std::ios::binary);
-    if (!file) {
-        std::cerr << "Error: Could not open file " << filename << std::endl;
-        return false;
-    }
+    if (!file) return false;
     file.read(reinterpret_cast<char*>(img.data), img.width * img.height);
     return file.gcount() == (img.width * img.height);
 }
 
 bool save_raw_image(const std::string& filename, const Image& img) {
     std::ofstream file(filename, std::ios::binary);
-    if (!file) {
-        std::cerr << "Error: Could not open file for writing: " << filename << std::endl;
-        return false;
-    }
+    if (!file) return false;
     file.write(reinterpret_cast<const char*>(img.data), img.width * img.height);
     return true;
 }
 
-// Generates a 255-value (white) square on a 0-value (black) background
-void generate_test_image(Image& img) {
+void generate_rect(Image& img) {
     std::memset(img.data, 0, img.width * img.height);
-    int square_size = img.width / 4;
-    int start_x = img.width / 2 - square_size / 2;
-    int start_y = img.height / 2 - square_size / 2;
-
-    for (int y = start_y; y < start_y + square_size; ++y) {
-        for (int x = start_x; x < start_x + square_size; ++x) {
+    int sq_size = img.width / 4;
+    int start_x = img.width / 2 - sq_size / 2;
+    int start_y = img.height / 2 - sq_size / 2;
+    for (int y = start_y; y < start_y + sq_size; ++y) {
+        for (int x = start_x; x < start_x + sq_size; ++x) {
             img.data[y * img.width + x] = 255;
+        }
+    }
+}
+
+void generate_circle(Image& img) {
+    std::memset(img.data, 0, img.width * img.height);
+    int cx = img.width / 2, cy = img.height / 2, r = img.width / 4;
+    for (int y = 0; y < img.height; ++y) {
+        for (int x = 0; x < img.width; ++x) {
+            if (std::sqrt(std::pow(x - cx, 2) + std::pow(y - cy, 2)) < r)
+                img.data[y * img.width + x] = 255;
+        }
+    }
+}
+
+void generate_diagonal(Image& img) {
+    std::memset(img.data, 0, img.width * img.height);
+    for (int y = 0; y < img.height; ++y) {
+        for (int x = 0; x < img.width; ++x) {
+            if (x > y - 10 && x < y + 10) img.data[y * img.width + x] = 255;
         }
     }
 }
