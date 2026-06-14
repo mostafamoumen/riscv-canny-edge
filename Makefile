@@ -15,9 +15,9 @@ HOST_BIN = test_host
 RV_BIN = canny_rv
 
 # 1. Compile and run GoogleTest suite natively on the host
-test: test.cpp canny.cpp
-	$(HOST_CXX) $(CXXFLAGS) $(GTEST_INCLUDES) test.cpp canny.cpp -o $(HOST_BIN) $(GTEST_LIBS)
-	./$(HOST_BIN)
+test: test.cpp
+	$(HOST_CXX) test.cpp $(GTEST_INCLUDES) $(GTEST_LIBS) -o test_host
+	./test_host
 
 # 2. Cross-compile the pipeline for RISC-V
 canny_rv: main.cpp canny.cpp
