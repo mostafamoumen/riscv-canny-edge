@@ -2,7 +2,7 @@
 #include <cstring> // Required for std::memset
 
 void compute_sobel_gradients(const uint8_t* input_image, int width, int height, int16_t* gx_output, int16_t* gy_output) {
-    // FIX: Zero out the entire output buffers to ensure borders are clean zeros
+    // Zero out the entire output buffers to ensure borders are clean zeros
     std::memset(gx_output, 0, width * height * sizeof(int16_t));
     std::memset(gy_output, 0, width * height * sizeof(int16_t));
 
@@ -10,13 +10,11 @@ void compute_sobel_gradients(const uint8_t* input_image, int width, int height, 
         for (int x = 1; x < width - 1; x++) {
             int i = y * width + x;
 
-            // Apply the 3x3 Gx Kernel (Vertical Edges)
             int16_t gx = 
                 (-1 * input_image[(y - 1) * width + (x - 1)]) + (1 * input_image[(y - 1) * width + (x + 1)]) +
                 (-2 * input_image[y * width + (x - 1)])       + (2 * input_image[y * width + (x + 1)]) +
                 (-1 * input_image[(y + 1) * width + (x - 1)]) + (1 * input_image[(y + 1) * width + (x + 1)]);
 
-            // Apply the 3x3 Gy Kernel (Horizontal Edges)
             int16_t gy = 
                 (-1 * input_image[(y - 1) * width + (x - 1)]) + (-2 * input_image[(y - 1) * width + x]) + (-1 * input_image[(y - 1) * width + (x + 1)]) +
                 ( 1 * input_image[(y + 1) * width + (x - 1)]) + ( 2 * input_image[(y + 1) * width + x]) + ( 1 * input_image[(y + 1) * width + (x + 1)]);
