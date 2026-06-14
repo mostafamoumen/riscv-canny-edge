@@ -10,13 +10,15 @@ struct Image {
     int height;
 };
 
-// Task 1: Image I/O Functions
+// Memory & File I/O
 Image allocate_image(int width, int height);
 void free_image(Image& img);
-bool load_raw_image(const std::string& filename, Image& img);
+bool load_raw_image(const std::string& filename, Image& img); // Added Load function
 bool save_raw_image(const std::string& filename, const Image& img);
 
-// Task 1: Test Image Generator
-void generate_test_image(Image& img);
+// Test Pattern Generators
+void generate_rect(Image& img);
+void generate_circle(Image& img);
+void generate_diagonal(Image& img);
 
 #endif

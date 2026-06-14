@@ -1,42 +1,92 @@
-#include "gaussian_blur.h"
+#ifndef GAUSSIAN_BLUR_CPP
+#define GAUSSIAN_BLUR_CPP
+
+#include "image_io.h"
 #include <algorithm>
 
-void apply_gaussian_blur(const Image& input, Image& output) {
-    // 5x5 Gaussian Kernel (approx sigma = 1.0, sum = 273)
-    const int kernel[5][5] = {
+template <typename TPixel, typename TAcc, typename TKernel>
+void apply_gaussian_2d(const Image& input, Image& output) {
+    const TKernel kernel[5][5] = {
         {2,  4,  5,  4, 2},
         {4,  9, 12,  9, 4},
         {5, 12, 15, 12, 5},
         {4,  9, 12,  9, 4},
         {2,  4,  5,  4, 2}
     };
-    const int kernel_sum = 273;
+    const TKernel kernel_sum = 273;
+    int w = input.width;
+    int h = input.height;
 
-    int width = input.width;
-    int height = input.height;
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            TAcc acc = 0;
 
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int32_t accumulator = 0;
-
-            // 5x5 Convolution window
             for (int ky = -2; ky <= 2; ++ky) {
                 for (int kx = -2; kx <= 2; ++kx) {
                     int iy = y + ky;
                     int ix = x + kx;
 
-                    // Zero-padding boundary handling
-                    uint8_t pixel_val = 0;
-                    if (iy >= 0 && iy < height && ix >= 0 && ix < width) {
-                        pixel_val = input.data[iy * width + ix];
+                    // Fixed: True Zero-Padding for boundary handling
+                    TPixel pixel_val = 0; 
+                    if (iy >= 0 && iy < h && ix >= 0 && ix < w) {
+                        pixel_val = input.data[iy * w + ix];
                     }
-
-                    accumulator += pixel_val * kernel[ky + 2][kx + 2];
+                    
+                    acc += pixel_val * kernel[ky + 2][kx + 2];
                 }
             }
-
-            // Normalize and clamp to [0, 255]
-            output.data[y * width + x] = static_cast<uint8_t>(accumulator / kernel_sum);
+            // Clamp final division to prevent integer overflow edge-cases
+            output.data[y * w + x] = static_cast<TPixel>(std::clamp(acc / kernel_sum, (TAcc)0, (TAcc)255));
         }
     }
 }
+
+template <typename TPixel, typename TAcc, typename TKernel>
+void apply_gaussian_separable(const Image& input, Image& output) {
+    const TKernel kernel1D[5] = {2, 4, 5, 4, 2};
+    const TKernel kernel_sum = 17; // 1D sum
+    
+    int w = input.width;
+    int h = input.height;
+    TAcc* temp = new TAcc[w * h];
+
+    // Pass 1: Horizontal Convolution
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            TAcc acc = 0;
+            for (int k = -2; k <= 2; ++k) {
+                int ix = x + k;
+                
+                // Fixed: True Zero-Padding
+                TPixel pixel_val = 0; 
+                if (ix >= 0 && ix < w) {
+                    pixel_val = input.data[y * w + ix];
+                }
+                acc += pixel_val * kernel1D[k + 2];
+            }
+            temp[y * w + x] = acc / kernel_sum;
+        }
+    }
+
+    // Pass 2: Vertical Convolution
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            TAcc acc = 0;
+            for (int k = -2; k <= 2; ++k) {
+                int iy = y + k;
+                
+                // Fixed: True Zero-Padding
+                TAcc temp_val = 0; 
+                if (iy >= 0 && iy < h) {
+                    temp_val = temp[iy * w + x];
+                }
+                acc += temp_val * kernel1D[k + 2];
+            }
+            // Final Clamp
+            output.data[y * w + x] = static_cast<TPixel>(std::clamp(acc / kernel_sum, (TAcc)0, (TAcc)255));
+        }
+    }
+    delete[] temp;
+}
+
+#endif
