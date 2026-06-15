@@ -2,5 +2,5 @@
 test_host
 canny_rv
 *.raw
-##generate_images
+generate_images
 .DS_Store
