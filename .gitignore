@@ -4,3 +4,4 @@ canny_rv
 *.raw
 generate_images
 .DS_Store
+equivalence_test_runner.elf
