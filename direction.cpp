@@ -19,15 +19,15 @@ void compute_direction(const int16_t* gx, const int16_t* gy, int width, int heig
             
         } else if (5 * ay > 12 * ax) {
             // Angle is near 90 degrees
-            direction_output[i] = 90;
+            direction_output[i] = 2;
             
         } else {
             // Angle is in the middle (a diagonal). 
             // We check if the signs of x and y are opposite to each other.
             if ((x < 0) != (y < 0)) {
-                direction_output[i] = 135; 
+                direction_output[i] = 3; 
             } else {
-                direction_output[i] = 45;
+                direction_output[i] = 1;
             }
         }
     }
