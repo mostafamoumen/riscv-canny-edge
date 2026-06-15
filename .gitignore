@@ -1,4 +1,6 @@
 *.o
 test_host
 canny_rv
+*.raw
+##generate_images
 .DS_Store
