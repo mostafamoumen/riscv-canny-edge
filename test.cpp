@@ -7,6 +7,7 @@
 // Include your actual headers
 #include "gaussian_blur.h"
 #include "image_io.h"
+#include "direction.h"
 
 const int WIDTH = 100;
 const int HEIGHT = 75;
@@ -94,4 +95,57 @@ TEST(GaussianBlurTest, ImpulseSymmetry) {
     // Check symmetry around the center pixel
     EXPECT_EQ(output.data[(cy - 1) * WIDTH + cx], output.data[(cy + 1) * WIDTH + cx]); // Top vs Bottom
     EXPECT_EQ(output.data[cy * WIDTH + (cx - 1)], output.data[cy * WIDTH + (cx + 1)]); // Left vs Right
+}
+
+
+// =========================================================================
+// 3. GRADIENT DIRECTION TESTS (Full Image Simulation)
+// =========================================================================
+
+TEST(GradientDirectionTest, AssignmentRequirements) {
+    // Allocate image-sized arrays for Gx, Gy, and the output directions
+    std::vector<int16_t> gx(WIDTH * HEIGHT, 0);
+    std::vector<int16_t> gy(WIDTH * HEIGHT, 0);
+    std::vector<uint8_t> dir_output(WIDTH * HEIGHT, 255); 
+
+    int center_idx = (HEIGHT / 2) * WIDTH + (WIDTH / 2);
+
+    // -----------------------------------------------------------------
+    // Scenario A: Vertical Edge (Produces a Horizontal Gradient)
+    // Requirement: Direction should be 0
+    // -----------------------------------------------------------------
+    std::fill(gx.begin(), gx.end(), 500); // Strong horizontal change everywhere
+    std::fill(gy.begin(), gy.end(), 0);   // No vertical change
+    
+    compute_direction(gx.data(), gy.data(), WIDTH, HEIGHT, dir_output.data());
+    
+    EXPECT_EQ(dir_output[center_idx], 0) 
+        << "Failed: Vertical edge image did not produce direction 0!";
+
+
+    // -----------------------------------------------------------------
+    // Scenario B: Horizontal Edge (Produces a Vertical Gradient)
+    // Requirement: Direction should be 2
+    // -----------------------------------------------------------------
+    std::fill(gx.begin(), gx.end(), 0);   // No horizontal change
+    std::fill(gy.begin(), gy.end(), 500); // Strong vertical change everywhere
+    
+    compute_direction(gx.data(), gy.data(), WIDTH, HEIGHT, dir_output.data());
+    
+    EXPECT_EQ(dir_output[center_idx], 2) 
+        << "Failed: Horizontal edge image did not produce direction 2!";
+
+
+    // -----------------------------------------------------------------
+    // Scenario C: Diagonal Edge (Produces Significant Gx and Gy)
+    // Requirement: Direction should be 1 or 3
+    // -----------------------------------------------------------------
+    std::fill(gx.begin(), gx.end(), 400); // Equal changes in both axes (45 degrees)
+    std::fill(gy.begin(), gy.end(), 400); 
+    
+    compute_direction(gx.data(), gy.data(), WIDTH, HEIGHT, dir_output.data());
+    
+    uint8_t diag_dir = dir_output[center_idx];
+    EXPECT_TRUE(diag_dir == 1 || diag_dir == 3) 
+        << "Failed: Diagonal edge image did not produce direction 1 or 3! Got: " << (int)diag_dir;
 }
