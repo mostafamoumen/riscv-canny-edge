@@ -89,4 +89,54 @@ void apply_gaussian_separable(const Image& input, Image& output) {
     delete[] temp;
 }
 
+template <typename TPixel, typename TAcc, typename TKernel>
+void apply_gaussian_separable_padded(const Image& input, Image& output) {
+    const TKernel kernel1D[5] = {2, 4, 5, 4, 2};
+    const TKernel kernel_sum = 17;
+    
+    int w = input.width;
+    int h = input.height;
+    
+    // Allocate a larger temporary canvas buffer area (+4 width, +4 height)
+    int pw = w + 4;
+    int ph = h + 4;
+    
+    // Value initialization syntax () automatically fills the entire buffer allocations with zeros
+    TPixel* padded = new TPixel[pw * ph](); 
+    TAcc* temp = new TAcc[pw * ph]();
+
+    // Copy original image canvas boundaries into the center frame of your zero-padded arena
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            padded[(y + 2) * pw + (x + 2)] = input.data[y * w + x];
+        }
+    }
+
+    // Pass 1: Horizontal Convolution (NO INTERNAL JUMP BRANCHES OR IF STATEMENTS)
+    for (int y = 2; y < h + 2; ++y) {
+        for (int x = 2; x < w + 2; ++x) {
+            TAcc acc = 0;
+            for (int k = -2; k <= 2; ++k) {
+                acc += padded[y * pw + (x + k)] * kernel1D[k + 2];
+            }
+            temp[y * pw + x] = acc / kernel_sum;
+        }
+    }
+
+    // Pass 2: Vertical Convolution (NO INTERNAL JUMP BRANCHES OR IF STATEMENTS)
+    for (int y = 2; y < h + 2; ++y) {
+        for (int x = 2; x < w + 2; ++x) {
+            TAcc acc = 0;
+            for (int k = -2; k <= 2; ++k) {
+                acc += temp[(y + k) * pw + x] * kernel1D[k + 2];
+            }
+            // Direct write out mapping back into the un-padded target array sizing
+            output.data[(y - 2) * w + (x - 2)] = static_cast<TPixel>(std::clamp(acc / kernel_sum, (TAcc)0, (TAcc)255));
+        }
+    }
+
+    delete[] padded;
+    delete[] temp;
+}
+
 #endif

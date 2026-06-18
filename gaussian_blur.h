@@ -11,6 +11,10 @@ void apply_gaussian_2d(const Image& input, Image& output);
 template <typename TPixel, typename TAcc, typename TKernel>
 void apply_gaussian_separable(const Image& input, Image& output);
 
+// Phase 4 Experiment: Separable Gaussian with zero-padded bounds (No conditional branches)
+template <typename TPixel, typename TAcc, typename TKernel>
+void apply_gaussian_separable_padded(const Image& input, Image& output);
+
 // C++ Templates must have their implementation visible to the compiler at instantiation.
 #include "gaussian_blur.cpp" 
 
