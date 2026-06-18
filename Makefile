@@ -27,6 +27,17 @@ canny_rv: main.cpp canny.cpp direction.cpp
 run: canny_rv
 	qemu-riscv64 -cpu rv64,v=true,vlen=256 ./$(RV_BIN)
 
-# 4. Remove all generated files
+# 4. Compile profiling harness with Phase 4's highest scalar optimization flag
+benchmark_rv: benchmark.cpp image_io.cpp gaussian_blur.cpp sobel.cpp magnitude.cpp direction.cpp
+	mkdir -p bin_rv
+	$(RV_CXX) $(RV_CXXFLAGS) -O3 $^ -o ./bin_rv/benchmark_rv
+
+# 5. Execute Phase 5 Profiling Harness inside QEMU with defined vector extensions
+profile: benchmark_rv
+	@echo "Launching Phase 5 Profile Session under QEMU Emulation Layer..."
+	qemu-riscv64 -cpu rv64,v=true,vlen=128 ./bin_rv/benchmark_rv
+
+# 6. Remove all generated files
 clean:
 	rm -f $(HOST_BIN) $(RV_BIN) *.o
+	rm -rf bin_rv
