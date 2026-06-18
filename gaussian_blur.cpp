@@ -125,8 +125,8 @@ void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int hei
                 v_sum = traits::macc(v_sum, coeff, v_pixel16, vl);
             }
             
-            // Divide by 17 (Multiply by 3855, shift right by 16)
-            typename traits::accum_v v_scaled = traits::mul(v_sum, 3855, vl);
+            // Divide by 17 (Multiply by 3856, shift right by 16)
+            typename traits::accum_v v_scaled = traits::mul(v_sum, 3856, vl);
             typename traits::accum_v v_final32 = traits::sra(v_scaled, 16, vl);
             
             // Store intermediate 16-bit results cleanly depending on template instance
@@ -168,8 +168,8 @@ void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int hei
                 v_sum = traits::macc(v_sum, coeff, v_pixel16, vl);
             }
             
-            // Divide by 17 (Multiply by 3855, shift right by 16)
-            typename traits::accum_v v_scaled = traits::mul(v_sum, 3855, vl);
+            // Divide by 17 (Multiply by 3856, shift right by 16)
+            typename traits::accum_v v_scaled = traits::mul(v_sum, 3856, vl);
             typename traits::accum_v v_final32 = traits::sra(v_scaled, 16, vl);
             
             uint8_t* dst_ptr = &dst[y * width + x];
