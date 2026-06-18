@@ -17,6 +17,8 @@ volatile int dummy_sink = 0;
 void gaussian_blur_rvv_m1(const uint8_t* src, uint8_t* dst, int width, int height);
 void gaussian_blur_rvv_m2(const uint8_t* src, uint8_t* dst, int width, int height);
 void gaussian_blur_rvv_m4(const uint8_t* src, uint8_t* dst, int width, int height);
+void compute_magnitude_l1_rvv(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* mag);
+void compute_sobel_gradients_rvv(const uint8_t* src, int width, int height, int16_t* gx, int16_t* gy);
 
 int main() {
     // Utilizing the mandated 100x75 non-power-of-two frame size to exercise tail cases
@@ -149,6 +151,48 @@ int main() {
     std::cout << "--------------------------------------------------\n";
     std::cout << "Maximum Speedup vs Scalar : " << speedup << "x faster!\n";
     std::cout << "==================================================\n";
+
+
+
+
+std::cout << "\n==================================================\n";
+std::cout << "PHASE 6.5: RVV MAGNITUDE PROFILING\n";
+std::cout << "==================================================\n";
+
+auto start_mag_rvv = std::chrono::high_resolution_clock::now();
+for (int i = 0; i < ITERATIONS; i++) {
+    compute_magnitude_l1_rvv(gx, gy, width, height, mag);
+    dummy_sink += mag[0];
+}
+auto end_mag_rvv = std::chrono::high_resolution_clock::now();
+double time_mag_rvv = std::chrono::duration<double, std::milli>(end_mag_rvv - start_mag_rvv).count();
+
+std::cout << "Scalar Magnitude Time : " << accum_magnitude << " ms\n";
+std::cout << "RVV L1 Magnitude Time : " << time_mag_rvv << " ms\n";
+std::cout << "Magnitude Speedup     : " << (accum_magnitude / time_mag_rvv) << "x faster!\n";
+std::cout << "==================================================\n";
+
+
+
+
+
+std::cout << "\n==================================================\n";
+std::cout << "PHASE 6.X: RVV SOBEL PROFILING\n";
+std::cout << "==================================================\n";
+
+auto start_sobel_rvv = std::chrono::high_resolution_clock::now();
+for (int i = 0; i < ITERATIONS; i++) {
+    compute_sobel_gradients_rvv(blur_out.data, width, height, gx, gy);
+    dummy_sink += gx[0];
+}
+auto end_sobel_rvv = std::chrono::high_resolution_clock::now();
+double time_sobel_rvv = std::chrono::duration<double, std::milli>(end_sobel_rvv - start_sobel_rvv).count();
+
+std::cout << "Scalar Sobel Time : " << accum_sobel << " ms\n";
+std::cout << "RVV Sobel Time    : " << time_sobel_rvv << " ms\n";
+std::cout << "Sobel Speedup     : " << (accum_sobel / time_sobel_rvv) << "x faster!\n";
+std::cout << "==================================================\n";
+
 
     // Clean up memory safely at the very end
     free_image(input); 

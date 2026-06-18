@@ -9,4 +9,6 @@ void compute_magnitude_l1(const int16_t* gx, const int16_t* gy, int width, int h
 // L2 Norm: Mathematically correct, uses square roots
 void compute_magnitude_l2(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* magnitude_output);
 
+void compute_magnitude_l1_rvv(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* mag);
+
 #endif
