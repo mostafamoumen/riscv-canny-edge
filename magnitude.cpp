@@ -46,3 +46,14 @@ void compute_magnitude_l2(const int16_t* gx, const int16_t* gy, int width, int h
         magnitude_output[i] = static_cast<uint8_t>((mag * 255.0f) / max_mag);
     }
 }
+
+
+
+
+extern "C" void compute_magnitude_l1_rvv(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* output) {
+    compute_magnitude_l1(gx, gy, width, height, output);
+}
+
+extern "C" void compute_magnitude_l2_rvv(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* output) {
+    compute_magnitude_l2(gx, gy, width, height, output);
+}

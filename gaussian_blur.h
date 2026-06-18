@@ -1,21 +1,24 @@
 #ifndef GAUSSIAN_BLUR_H
 #define GAUSSIAN_BLUR_H
 
+#include <stdint.h>
 #include "image_io.h"
 
-// Task 2: Standard 2D Convolution (Template)
-template <typename TPixel, typename TAcc, typename TKernel>
-void apply_gaussian_2d(const Image& input, Image& output);
-
-// Task 2: Separable Gaussian (Template)
-template <typename TPixel, typename TAcc, typename TKernel>
+// 1. SCALAR BASES (Template declarations)
+template <typename PixelType, typename AccType, typename KernelType>
 void apply_gaussian_separable(const Image& input, Image& output);
 
-// Phase 4 Experiment: Separable Gaussian with zero-padded bounds (No conditional branches)
-template <typename TPixel, typename TAcc, typename TKernel>
+template <typename PixelType, typename AccType, typename KernelType>
 void apply_gaussian_separable_padded(const Image& input, Image& output);
 
-// C++ Templates must have their implementation visible to the compiler at instantiation.
-#include "gaussian_blur.cpp" 
+// 2. RVV INTRINSIC SYMBOLS
+extern "C" {
+    void apply_gaussian_separable_rvv(const uint8_t* input, uint8_t* output, int width, int height);
+}
 
-#endif
+// 3. LMUL Sweep Symbols
+void gaussian_blur_rvv_m1(const uint8_t* src, uint8_t* dst, int width, int height);
+void gaussian_blur_rvv_m2(const uint8_t* src, uint8_t* dst, int width, int height);
+void gaussian_blur_rvv_m4(const uint8_t* src, uint8_t* dst, int width, int height);
+
+#endif // GAUSSIAN_BLUR_H

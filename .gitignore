@@ -5,3 +5,6 @@ canny_rv
 generate_images
 .DS_Store
 equivalence_test_runner.elf
+bin_rv
+rvv_experiments
+vecadd_lmul_test.elf

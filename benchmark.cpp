@@ -7,9 +7,16 @@
 #include <iomanip>
 #include <cstdlib>
 #include <chrono>
+#include <algorithm> // Needed for std::min
 
 const int ITERATIONS = 100;
 volatile int dummy_sink = 0;
+
+// Forward declarations for our RVV multi-LMUL implementations 
+// so the compiler knows they exist!
+void gaussian_blur_rvv_m1(const uint8_t* src, uint8_t* dst, int width, int height);
+void gaussian_blur_rvv_m2(const uint8_t* src, uint8_t* dst, int width, int height);
+void gaussian_blur_rvv_m4(const uint8_t* src, uint8_t* dst, int width, int height);
 
 int main() {
     // Utilizing the mandated 100x75 non-power-of-two frame size to exercise tail cases
@@ -37,45 +44,41 @@ int main() {
     double accum_magnitude = 0.0;
     double accum_direction = 0.0;
 
-    // 1. Profiling Gaussian Padded Separable Stage
+// 1. Profiling Gaussian Separable Stage
+    auto start_gaussian = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ITERATIONS; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
         apply_gaussian_separable_padded<uint8_t, int32_t, int16_t>(input, blur_out);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> ms = end - start;
-        accum_gaussian += ms.count();
         dummy_sink += blur_out.data[0]; 
     }
+    auto end_gaussian = std::chrono::high_resolution_clock::now();
+    accum_gaussian = std::chrono::duration<double, std::milli>(end_gaussian - start_gaussian).count();
 
     // 2. Profiling Sobel Gradients Stage
+    auto start_sobel = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ITERATIONS; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
         compute_sobel_gradients(blur_out.data, width, height, gx, gy);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> ms = end - start;
-        accum_sobel += ms.count();
         dummy_sink += gx[0]; 
     }
+    auto end_sobel = std::chrono::high_resolution_clock::now();
+    accum_sobel = std::chrono::duration<double, std::milli>(end_sobel - start_sobel).count();
 
     // 3. Profiling Magnitude L1 Stage
+    auto start_magnitude = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ITERATIONS; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
         compute_magnitude_l1(gx, gy, width, height, mag);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> ms = end - start;
-        accum_magnitude += ms.count();
         dummy_sink += mag[0];
     }
+    auto end_magnitude = std::chrono::high_resolution_clock::now();
+    accum_magnitude = std::chrono::duration<double, std::milli>(end_magnitude - start_magnitude).count();
 
     // 4. Profiling Direction Quantization Stage
+    auto start_direction = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < ITERATIONS; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
         compute_direction(gx, gy, width, height, dir);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double, std::milli> ms = end - start;
-        accum_direction += ms.count();
         dummy_sink += dir[0];
     }
+    auto end_direction = std::chrono::high_resolution_clock::now();
+    accum_direction = std::chrono::duration<double, std::milli>(end_direction - start_direction).count();
 
     // Compute System Metrics
     double total_pipeline_time = accum_gaussian + accum_sobel + accum_magnitude + accum_direction;
@@ -91,12 +94,69 @@ int main() {
     std::cout << "Total Pure Computational Pipeline Time: " << total_pipeline_time << " ms\n";
     std::cout << "==================================================\n";
 
+
+    std::cout << "\n==================================================\n";
+    std::cout << "PHASE 6.2: RVV LMUL SWEEP (GAUSSIAN BLUR OVER " << ITERATIONS << " ITERATIONS)\n";
+    std::cout << "==================================================\n";
+
+    // Setup pointers and dimensions
+    const uint8_t* src_buf = input.data;  
+    uint8_t* rvv_dst_buf = blur_out.data; 
+    int w = input.width;
+    int h = input.height;
+
+    // --------------------------------------------------
+    // Time LMUL = 1
+    // --------------------------------------------------
+    auto start_m1 = std::chrono::high_resolution_clock::now();
+    for(int i = 0; i < ITERATIONS; i++) {
+        gaussian_blur_rvv_m1(src_buf, rvv_dst_buf, w, h);
+        dummy_sink += rvv_dst_buf[0];
+    }
+    auto end_m1 = std::chrono::high_resolution_clock::now();
+    double time_m1 = std::chrono::duration<double, std::milli>(end_m1 - start_m1).count();
+
+    // --------------------------------------------------
+    // Time LMUL = 2
+    // --------------------------------------------------
+    auto start_m2 = std::chrono::high_resolution_clock::now();
+    for(int i = 0; i < ITERATIONS; i++) {
+        gaussian_blur_rvv_m2(src_buf, rvv_dst_buf, w, h);
+        dummy_sink += rvv_dst_buf[0];
+    }
+    auto end_m2 = std::chrono::high_resolution_clock::now();
+    double time_m2 = std::chrono::duration<double, std::milli>(end_m2 - start_m2).count();
+
+    // --------------------------------------------------
+    // Time LMUL = 4
+    // --------------------------------------------------
+    auto start_m4 = std::chrono::high_resolution_clock::now();
+    for(int i = 0; i < ITERATIONS; i++) {
+        gaussian_blur_rvv_m4(src_buf, rvv_dst_buf, w, h);
+        dummy_sink += rvv_dst_buf[0];
+    }
+    auto end_m4 = std::chrono::high_resolution_clock::now();
+    double time_m4 = std::chrono::duration<double, std::milli>(end_m4 - start_m4).count();
+
+    // Print the results
+    std::cout << "LMUL = 1 Version :  " << time_m1 << " ms\n";
+    std::cout << "LMUL = 2 Version :  " << time_m2 << " ms\n";
+    std::cout << "LMUL = 4 Version :  " << time_m4 << " ms\n";
+    
+    // Compare best RVV to your Scalar baseline
+    double best_rvv = std::min({time_m1, time_m2, time_m4});
+    double speedup = accum_gaussian / best_rvv;
+    std::cout << "--------------------------------------------------\n";
+    std::cout << "Maximum Speedup vs Scalar : " << speedup << "x faster!\n";
+    std::cout << "==================================================\n";
+
+    // Clean up memory safely at the very end
     free_image(input); 
     free_image(blur_out);
     free(gx); 
     free(gy); 
     free(mag); 
     free(dir);
-    
+
     return 0;
 }
