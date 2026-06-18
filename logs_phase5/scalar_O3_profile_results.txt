@@ -1,0 +1,14 @@
+==================================================
+PHASE 5: INITIALIZING SCALAR PROFILING HARNESS
+==================================================
+
+--------------------------------------------------
+PERFORMANCE BREAKDOWN OVER 100 ITERATIONS
+--------------------------------------------------
+Gaussian Blur :  81.6810 ms | Percentage: 42.1199%
+Sobel Filter  :  44.7010 ms | Percentage: 23.0507%
+Magnitude (L1):  38.4060 ms | Percentage: 19.8046%
+Direction     :  29.1370 ms | Percentage: 15.0249%
+--------------------------------------------------
+Total Pure Computational Pipeline Time: 193.9250 ms
+==================================================
