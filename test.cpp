@@ -8,6 +8,8 @@
 #include "gaussian_blur.h"
 #include "image_io.h"
 #include "direction.h"
+#include "sobel.h"
+#include "magnitude.h"
 
 const int WIDTH = 100;
 const int HEIGHT = 75;
@@ -148,4 +150,98 @@ TEST(GradientDirectionTest, AssignmentRequirements) {
     uint8_t diag_dir = dir_output[center_idx];
     EXPECT_TRUE(diag_dir == 1 || diag_dir == 3) 
         << "Failed: Diagonal edge image did not produce direction 1 or 3! Got: " << (int)diag_dir;
+}
+
+
+// ==========================================
+// SOBEL TESTS
+// ==========================================
+
+TEST(SobelTest, UniformImageProducesZero) {
+    // A uniform gray image should produce zero gradients everywhere.
+    std::vector<uint8_t> input(WIDTH * HEIGHT, 128); 
+    std::vector<int16_t> gx(WIDTH * HEIGHT, -1);
+    std::vector<int16_t> gy(WIDTH * HEIGHT, -1);
+
+    compute_sobel_gradients(input.data(), WIDTH, HEIGHT, gx.data(), gy.data());
+
+    // Verify all pixels are zero
+    for (int i = 0; i < WIDTH * HEIGHT; ++i) {
+        EXPECT_EQ(gx[i], 0);
+        EXPECT_EQ(gy[i], 0);
+    }
+}
+
+TEST(SobelTest, VerticalEdge) {
+    // Sharp vertical edge: Left (0) | Right (255)
+    std::vector<uint8_t> input(WIDTH * HEIGHT, 0);
+    for (int y = 0; y < HEIGHT; ++y) {
+        for (int x = WIDTH / 2; x < WIDTH; ++x) {
+            input[y * WIDTH + x] = 255;
+        }
+    }
+
+    std::vector<int16_t> gx(WIDTH * HEIGHT, 0);
+    std::vector<int16_t> gy(WIDTH * HEIGHT, 0);
+    
+    compute_sobel_gradients(input.data(), WIDTH, HEIGHT, gx.data(), gy.data());
+
+    int center_x = WIDTH / 2;
+    int edge_idx = 35 * WIDTH + center_x;
+    
+    // Gx should detect a strong vertical shift change
+    EXPECT_GT(std::abs(gx[edge_idx]), 500); 
+    // Gy should be clean zero along a perfectly vertical axis
+    EXPECT_NEAR(gy[edge_idx], 0, 1); 
+}
+
+TEST(SobelTest, HorizontalEdge) {
+    // Sharp horizontal edge: Top (0) | Bottom (255)
+    std::vector<uint8_t> input(WIDTH * HEIGHT, 0);
+    for (int y = HEIGHT / 2; y < HEIGHT; ++y) {
+        for (int x = 0; x < WIDTH; ++x) {
+            input[y * WIDTH + x] = 255;
+        }
+    }
+
+    std::vector<int16_t> gx(WIDTH * HEIGHT, 0);
+    std::vector<int16_t> gy(WIDTH * HEIGHT, 0);
+    
+    compute_sobel_gradients(input.data(), WIDTH, HEIGHT, gx.data(), gy.data());
+
+    int edge_idx = (HEIGHT / 2) * WIDTH + 50;
+    
+    EXPECT_GT(std::abs(gy[edge_idx]), 500); 
+    EXPECT_NEAR(gx[edge_idx], 0, 1); 
+}
+// ==========================================
+// MAGNITUDE TESTS
+// ==========================================
+
+TEST(MagnitudeTest, L1andL2RandomImage) {
+    // Both methods should produce nonzero output on a random image and not crash.
+    std::vector<int16_t> gx(WIDTH * HEIGHT);
+    std::vector<int16_t> gy(WIDTH * HEIGHT);
+    
+    for(int i = 0; i < WIDTH * HEIGHT; ++i) {
+        gx[i] = (rand() % 255) - 128;
+        gy[i] = (rand() % 255) - 128;
+    }
+
+    std::vector<uint8_t> out_l1(WIDTH * HEIGHT, 0);
+    std::vector<uint8_t> out_l2(WIDTH * HEIGHT, 0);
+
+    compute_magnitude_l1(gx.data(), gy.data(), WIDTH, HEIGHT, out_l1.data());
+    compute_magnitude_l2(gx.data(), gy.data(), WIDTH, HEIGHT, out_l2.data());
+
+    // Verify it didn't output all zeros.
+    bool l1_has_nonzero = false;
+    bool l2_has_nonzero = false;
+    for(int i = 0; i < WIDTH * HEIGHT; ++i) {
+        if (out_l1[i] > 0) l1_has_nonzero = true;
+        if (out_l2[i] > 0) l2_has_nonzero = true;
+    }
+
+    EXPECT_TRUE(l1_has_nonzero);
+    EXPECT_TRUE(l2_has_nonzero);
 }
