@@ -32,3 +32,8 @@ void compute_direction(const int16_t* gx, const int16_t* gy, int width, int heig
         }
     }
 }
+
+
+extern "C" void compute_direction_rvv(const int16_t* gx, const int16_t* gy, int width, int height, uint8_t* output) {
+    compute_direction(gx, gy, width, height, output);
+}

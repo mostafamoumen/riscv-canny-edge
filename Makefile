@@ -37,6 +37,46 @@ profile: benchmark_rv
 	@echo "Launching Phase 5 Profile Session under QEMU Emulation Layer..."
 	qemu-riscv64 -cpu rv64,v=true,vlen=128 ./bin_rv/benchmark_rv
 
+
+
+# Execute an automated profiling sweep across multiple VLEN settings
+profile_sweep: benchmark_rv
+	@echo "========================================="
+	@echo "Profiling LMUL Sweep at VLEN = 128"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=128 ./bin_rv/benchmark_rv
+	@echo "========================================="
+	@echo "Profiling LMUL Sweep at VLEN = 256"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=256 ./bin_rv/benchmark_rv
+	@echo "========================================="
+	@echo "Profiling LMUL Sweep at VLEN = 512"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=512 ./bin_rv/benchmark_rv
+
+
+# Target to cross-compile your entire pipeline equivalence test for RISC-V
+equivalence_rv: equivalence_tests.cpp image_io.cpp gaussian_blur.cpp sobel.cpp magnitude.cpp direction.cpp
+	mkdir -p bin_rv
+	$(RV_CXX) $(RV_CXXFLAGS) -O2 $^ -o ./bin_rv/equivalence_tests
+
+# Target to execute the VLEN sweep on QEMU automatically
+run_equivalence_sweep: equivalence_rv
+	@echo "========================================="
+	@echo "Running Equivalence Sweep at VLEN = 128"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=128 ./bin_rv/equivalence_tests
+	@echo "========================================="
+	@echo "Running Equivalence Sweep at VLEN = 256"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=256 ./bin_rv/equivalence_tests
+	@echo "========================================="
+	@echo "Running Equivalence Sweep at VLEN = 512"
+	@echo "========================================="
+	qemu-riscv64 -cpu rv64,v=true,vlen=512 ./bin_rv/equivalence_tests
+
+
+
 # 6. Remove all generated files
 clean:
 	rm -f $(HOST_BIN) $(RV_BIN) *.o

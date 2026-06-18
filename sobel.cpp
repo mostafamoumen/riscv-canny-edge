@@ -24,3 +24,10 @@ void compute_sobel_gradients(const uint8_t* input_image, int width, int height, 
         }
     }
 }
+
+
+
+extern "C" void compute_sobel_gradients_rvv(const uint8_t* input, int width, int height, int16_t* gx, int16_t* gy) {
+    // Temporary placeholder: Run scalar code so the test framework can compile
+    compute_sobel_gradients(input, width, height, gx, gy);
+}
