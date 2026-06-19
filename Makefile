@@ -99,6 +99,7 @@ run_equivalence_sweep: equivalence_rv
 	@echo "========================================="
 	qemu-riscv64 -cpu rv64,v=true,vlen=512 ./bin_rv/equivalence_tests
 
+
 # 6. Remove all generated files (Updated to tidy up raw and png files too)
 clean:
 	rm -f $(HOST_BIN) $(RV_BIN) *.o *.raw *.png
