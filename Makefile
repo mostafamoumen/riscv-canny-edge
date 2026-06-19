@@ -37,8 +37,6 @@ profile: benchmark_rv
 	@echo "Launching Phase 5 Profile Session under QEMU Emulation Layer..."
 	qemu-riscv64 -cpu rv64,v=true,vlen=128 ./bin_rv/benchmark_rv
 
-
-
 # Execute an automated profiling sweep across multiple VLEN settings
 profile_sweep: benchmark_rv
 	@echo "========================================="
@@ -53,7 +51,6 @@ profile_sweep: benchmark_rv
 	@echo "Profiling LMUL Sweep at VLEN = 512"
 	@echo "========================================="
 	qemu-riscv64 -cpu rv64,v=true,vlen=512 ./bin_rv/benchmark_rv
-
 
 # Target to cross-compile your entire pipeline equivalence test for RISC-V
 equivalence_rv: equivalence_tests.cpp image_io.cpp gaussian_blur.cpp sobel.cpp magnitude.cpp direction.cpp
@@ -75,9 +72,34 @@ run_equivalence_sweep: equivalence_rv
 	@echo "========================================="
 	qemu-riscv64 -cpu rv64,v=true,vlen=512 ./bin_rv/equivalence_tests
 
-
-
 # 6. Remove all generated files
 clean:
 	rm -f $(HOST_BIN) $(RV_BIN) *.o
 	rm -rf bin_rv
+
+
+# =========================================================================
+# PHASE 4: COMPLETELY ISOLATED SCALAR COMPILER SWEEP RULES
+# =========================================================================
+
+PHASE4_SRCS = phase4_benchmark.cpp image_io.cpp gaussian_blur.cpp sobel.cpp magnitude.cpp direction.cpp
+PHASE4_LOG_DIR = logs_phase4
+
+phase4_build_O0: $(PHASE4_SRCS)
+	$(RV_CXX) -Wall -Wextra -std=c++17 -march=rv64gcv -O0 -fopt-info-vec-all=$(PHASE4_LOG_DIR)/vectorization_O0.txt $^ -o ./bin_rv/phase4_scalar_O0
+
+phase4_build_O2: $(PHASE4_SRCS)
+	$(RV_CXX) -Wall -Wextra -std=c++17 -march=rv64gcv -O2 -fno-tree-vectorize -fopt-info-vec-all=$(PHASE4_LOG_DIR)/vectorization_O2.txt $^ -o ./bin_rv/phase4_scalar_O2
+
+phase4_build_O3: $(PHASE4_SRCS)
+	$(RV_CXX) -Wall -Wextra -std=c++17 -march=rv64gcv -O3 -fno-tree-vectorize -fopt-info-vec-all=$(PHASE4_LOG_DIR)/vectorization_O3.txt $^ -o ./bin_rv/phase4_scalar_O3
+
+phase4_build_Os: $(PHASE4_SRCS)
+	$(RV_CXX) -Wall -Wextra -std=c++17 -march=rv64gcv -Os -fno-tree-vectorize -fopt-info-vec-all=$(PHASE4_LOG_DIR)/vectorization_Os.txt $^ -o ./bin_rv/phase4_scalar_Os
+
+phase4_build_Ofast: $(PHASE4_SRCS)
+	$(RV_CXX) -Wall -Wextra -std=c++17 -march=rv64gcv -Ofast -fno-tree-vectorize -fopt-info-vec-all=$(PHASE4_LOG_DIR)/vectorization_Ofast.txt $^ -o ./bin_rv/phase4_scalar_Ofast
+
+phase4_run_sweep:
+	chmod +x phase4_sweep.sh
+	./phase4_sweep.sh
