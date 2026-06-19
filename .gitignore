@@ -8,3 +8,20 @@ equivalence_test_runner.elf
 bin_rv
 rvv_experiments
 vecadd_lmul_test.elf
+
+*.png
+ 
+# =========================================================================
+# Input images used for testing (regenerate via generate_test_images.cpp
+# or pull in your own — don't want large binary blobs in git history)
+# =========================================================================
+*.jpg
+*.jpeg
+*.heic
+ 
+# =========================================================================
+# Editor / OS noise
+# =========================================================================
+*:Zone.Identifier
+.vscode/
+
