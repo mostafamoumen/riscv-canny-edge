@@ -59,8 +59,8 @@ bool verify_buffers_int16(const int16_t* scalar, const int16_t* vector, int size
 
 int main() {
     // Mandated non-power-of-two frame configuration to force strip-mining tail boundaries
-    const int width = 100;
-    const int height = 75;
+    const int width = 512;
+    const int height = 512;
     const int total_pixels = width * height;
     
     std::cout << "=================================================================\n";
@@ -70,7 +70,7 @@ int main() {
 
     // Allocation of tracking buffers aligned to cache parameters
     Image input_img = allocate_image(width, height);
-    generate_circle(input_img); // Generate synthetic test geometric reference pattern
+    load_raw_image("my_image.raw", input_img);
 
     Image blur_scalar_out = allocate_image(width, height);
     uint8_t* blur_rvv_out = static_cast<uint8_t*>(aligned_alloc(64, total_pixels * sizeof(uint8_t)));

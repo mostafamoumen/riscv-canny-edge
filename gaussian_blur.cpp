@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <riscv_vector.h>
+#include "gaussian_blur.h"
 
 // ============================================================================
 // PHASE 6.2: RVV TYPE & INTRINSIC TRAITS CONFIGURATION
@@ -70,21 +71,43 @@ template <> struct RvvTraits<4> {
     using kernel_v = vint16m4_t;   
     using accum_v  = vint32m8_t;   
     
+    // 1. Operation: Sets the vector length (vl) for the strip-mining loop.
+    // 2. LMUL: Matches the target template LMUL (4) to balance register pressure and throughput.
+    // 3. VLEN Agnosticism: If VLEN changes, this dynamically returns a larger/smaller 'vl', meaning the exact same loop code will automatically process more/fewer pixels per iteration without recompiling.
     static size_t setvl(size_t n) { return __riscv_vsetvl_e16m4(n); }
+    
     static accum_v zero_accum(size_t vl) { return __riscv_vmv_v_x_i32m8(0, vl); }
+    
+    // 1. Operation: Vector load to fetch 8-bit grayscale pixels from memory.
+    // 2. LMUL: Uses half the target LMUL (m2 for m4 processing) because the 8-bit data will be widened to 16-bit for math.
+    // 3. VLEN Agnosticism: Automatically loads exactly 'vl' elements from memory, regardless of hardware vector register size.
     static pixel_v load_pixel(const uint8_t* ptr, size_t vl) { return __riscv_vle8_v_u8m2(ptr, vl); }
     
+    // 1. Operation: Zero-extends an 8-bit unsigned vector into a 16-bit vector to prevent overflow during multiplication.
+    // 2. LMUL: This explicitly doubles the LMUL (from m2 to m4) because 16-bit elements take twice the register space of 8-bit elements.
+    // 3. VLEN Agnosticism: Works flawlessly across VLEN sizes because 'vl' guarantees we only process the active elements.
     static kernel_v widen_pixel(pixel_v v, size_t vl) { 
         vuint16m4_t ext = __riscv_vzext_vf2_u16m4(v, vl);
         return __riscv_vreinterpret_v_u16m4_i16m4(ext); 
     }
     
+    // 1. Operation: Widening multiply-accumulate. Multiplies 16-bit pixel by 16-bit scalar coeff and accumulates into a 32-bit vector.
+    // 2. LMUL: Doubles the LMUL again (from m4 to m8) to hold the 32-bit accumulated sum.
+    // 3. VLEN Agnosticism: Hardware automatically scales the number of parallel multiply-accumulates based on VLEN.
     static accum_v macc(accum_v sum, int16_t coeff, kernel_v pix16, size_t vl) { 
         return __riscv_vwmacc_vx_i32m8(sum, coeff, pix16, vl); 
     }
+    
     static accum_v mul(accum_v v, int32_t factor, size_t vl) { return __riscv_vmul_vx_i32m8(v, factor, vl); }
+    
+    // 1. Operation: Arithmetic shift right. Used alongside vector multiply to simulate fast fixed-point division.
+    // 2. LMUL: Matches the m8 accumulator LMUL.
+    // 3. VLEN Agnosticism: Shifts exactly 'vl' elements in parallel across any hardware width.
     static accum_v sra(accum_v v, unsigned int shift, size_t vl) { return __riscv_vsra_vx_i32m8(v, shift, vl); }
     
+    // 1. Operation: Narrows the 32-bit accumulator back down to an 8-bit pixel vector and stores it to memory.
+    // 2. LMUL: Steps down from m8 -> m4 -> m2 to accurately map the data sizes back to the original pixel format.
+    // 3. VLEN Agnosticism: The hardware applies the exact same narrowing conversion and store to 'vl' elements dynamically.
     static void store_pixel(uint8_t* ptr, accum_v v_final32, size_t vl) {
         vint16m4_t v_16 = __riscv_vncvt_x_x_w_i16m4(v_final32, vl);
         vuint16m4_t vu_16 = __riscv_vreinterpret_v_i16m4_u16m4(v_16);
@@ -97,29 +120,42 @@ template <> struct RvvTraits<4> {
 // CORE RVV IMPLEMENTATION (SEPARABLE O(K+K))
 // ============================================================================
 
+// ============================================================================
+// CORE RVV IMPLEMENTATION (SEPARABLE O(K+K)) - BORDER PADDED
+// ============================================================================
+
 template <int LMUL>
 void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int height) {
     using traits = RvvTraits<LMUL>;
     
-    std::memset(dst, 0, width * height);
-
     const int16_t kernel1D[5] = {2, 4, 5, 4, 2};
 
-    // Allocate a temporary buffer for the horizontal pass results.
-    int16_t* temp = new int16_t[width * height]();
+    // 1. Create dimensions that include a 2-pixel border on all sides
+    int pw = width + 4;
+    int ph = height + 4;
+
+    // 2. Allocate padded buffers (zero-initialized)
+    uint8_t* padded_src = new uint8_t[pw * ph]();
+    int16_t* temp = new int16_t[pw * ph]();
+
+    // 3. Copy the original image into the center of the padded buffer
+    for (int y = 0; y < height; ++y) {
+        std::memcpy(&padded_src[(y + 2) * pw + 2], &src[y * width], width);
+    }
 
     // ------------------------------------------------------------------------
-    // PASS 1: Horizontal Convolution
+    // PASS 1: Horizontal Convolution (Process all padded rows)
     // ------------------------------------------------------------------------
-    for (int y = 0; y < height; ++y) {
-        int x = 2; // Skip left border
-        while (x < width - 2) {
-            size_t vl = traits::setvl(width - 2 - x);
+    for (int y = 0; y < ph; ++y) {
+        int x = 2; 
+        while (x < pw - 2) {
+            // Process 'width' elements per row
+            size_t vl = traits::setvl(pw - 2 - x);
             typename traits::accum_v v_sum = traits::zero_accum(vl);
             
             for (int kx = -2; kx <= 2; ++kx) {
                 int16_t coeff = kernel1D[kx + 2];
-                const uint8_t* pixel_ptr = &src[y * width + (x + kx)];
+                const uint8_t* pixel_ptr = &padded_src[y * pw + (x + kx)];
                 typename traits::pixel_v v_pixel = traits::load_pixel(pixel_ptr, vl); 
                 typename traits::kernel_v v_pixel16 = traits::widen_pixel(v_pixel, vl);
                 v_sum = traits::macc(v_sum, coeff, v_pixel16, vl);
@@ -129,13 +165,12 @@ void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int hei
             typename traits::accum_v v_scaled = traits::mul(v_sum, 3856, vl);
             typename traits::accum_v v_final32 = traits::sra(v_scaled, 16, vl);
             
-            // Store intermediate 16-bit results cleanly depending on template instance
             if constexpr (LMUL == 1) {
-                __riscv_vse16_v_i16m1(&temp[y * width + x], __riscv_vncvt_x_x_w_i16m1(v_final32, vl), vl);
+                __riscv_vse16_v_i16m1(&temp[y * pw + x], __riscv_vncvt_x_x_w_i16m1(v_final32, vl), vl);
             } else if constexpr (LMUL == 2) {
-                __riscv_vse16_v_i16m2(&temp[y * width + x], __riscv_vncvt_x_x_w_i16m2(v_final32, vl), vl);
+                __riscv_vse16_v_i16m2(&temp[y * pw + x], __riscv_vncvt_x_x_w_i16m2(v_final32, vl), vl);
             } else if constexpr (LMUL == 4) {
-                __riscv_vse16_v_i16m4(&temp[y * width + x], __riscv_vncvt_x_x_w_i16m4(v_final32, vl), vl);
+                __riscv_vse16_v_i16m4(&temp[y * pw + x], __riscv_vncvt_x_x_w_i16m4(v_final32, vl), vl);
             }
 
             x += vl; 
@@ -143,19 +178,18 @@ void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int hei
     }
 
     // ------------------------------------------------------------------------
-    // PASS 2: Vertical Convolution
+    // PASS 2: Vertical Convolution (Process only the valid central rows)
     // ------------------------------------------------------------------------
-    for (int y = 2; y < height - 2; ++y) {
-        int x = 2; // Keep x bounded as well to match horizontal pass edges
-        while (x < width - 2) {
-            size_t vl = traits::setvl(width - 2 - x);
+    for (int y = 2; y < ph - 2; ++y) {
+        int x = 2; 
+        while (x < pw - 2) {
+            size_t vl = traits::setvl(pw - 2 - x);
             typename traits::accum_v v_sum = traits::zero_accum(vl);
             
             for (int ky = -2; ky <= 2; ++ky) {
                 int16_t coeff = kernel1D[ky + 2];
-                const int16_t* pixel_ptr = &temp[(y + ky) * width + x];
+                const int16_t* pixel_ptr = &temp[(y + ky) * pw + x];
                 
-                // Load 16-bit directly from temp buffer using explicit LMUL sizing
                 typename traits::kernel_v v_pixel16;
                 if constexpr (LMUL == 1) {
                     v_pixel16 = __riscv_vle16_v_i16m1(pixel_ptr, vl);
@@ -168,17 +202,18 @@ void gaussian_blur_rvv_core(const uint8_t* src, uint8_t* dst, int width, int hei
                 v_sum = traits::macc(v_sum, coeff, v_pixel16, vl);
             }
             
-            // Divide by 17 (Multiply by 3856, shift right by 16)
             typename traits::accum_v v_scaled = traits::mul(v_sum, 3856, vl);
             typename traits::accum_v v_final32 = traits::sra(v_scaled, 16, vl);
             
-            uint8_t* dst_ptr = &dst[y * width + x];
+            // Write directly to the original destination (shifting coordinates back)
+            uint8_t* dst_ptr = &dst[(y - 2) * width + (x - 2)];
             traits::store_pixel(dst_ptr, v_final32, vl);
             
             x += vl; 
         }
     }
 
+    delete[] padded_src;
     delete[] temp;
 }
 

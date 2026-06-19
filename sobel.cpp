@@ -27,17 +27,6 @@ void compute_sobel_gradients(const uint8_t* input_image, int width, int height, 
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
 void compute_sobel_gradients_rvv(const uint8_t* src, int width, int height, int16_t* gx, int16_t* gy) {
     // Process the image avoiding the 1-pixel outer border
     for (int y = 1; y < height - 1; y++) {
@@ -45,7 +34,9 @@ void compute_sobel_gradients_rvv(const uint8_t* src, int width, int height, int1
         int remaining = width - 2;
         
         while (remaining > 0) {
-            // Use LMUL=4 for 16-bit processing
+            // 1. Operation: Sets vector length for 16-bit processing.
+            // 2. LMUL: Chose LMUL=4 because we need multiple vectors loaded at once (3 rows) and LMUL=8 would cause register spilling.
+            // 3. VLEN Agnosticism: Dynamically sets 'vl' so the loop strip-mines safely across any hardware width.
             size_t vl = __riscv_vsetvl_e16m4(remaining);
             
             // Set up pointers for the 3 rows of our 3x3 window
@@ -82,11 +73,17 @@ void compute_sobel_gradients_rvv(const uint8_t* src, int width, int height, int1
             
             // --- COMPUTE Gx ---
             // Gx = (p02 - p00) + 2*(p12 - p10) + (p22 - p20)
+            
+            // 1. Operation: Vector addition/subtraction to calculate the Sobel gradient differences.
+            // 2. LMUL: Kept at LMUL=4 to maximize throughput for 16-bit signed gradient data.
+            // 3. VLEN Agnosticism: Will compute parallel additions/subtractions proportional to the hardware VLEN.
             vint16m4_t gx0 = __riscv_vsub_vv_i16m4(p02, p00, vl);
             vint16m4_t gx1 = __riscv_vsub_vv_i16m4(p12, p10, vl);
             vint16m4_t gx2 = __riscv_vsub_vv_i16m4(p22, p20, vl);
             
-            // Multiply by 2 using a left shift (<< 1)
+            // 1. Operation: Vector shift-left by a scalar. Used as a fast substitute for multiplying by 2.
+            // 2. LMUL: LMUL=4 matches the rest of the 16-bit data path.
+            // 3. VLEN Agnosticism: Will shift 'vl' elements simultaneously regardless of underlying physical VLEN.
             gx1 = __riscv_vsll_vx_i16m4(gx1, 1, vl); 
             vint16m4_t v_gx = __riscv_vadd_vv_i16m4(__riscv_vadd_vv_i16m4(gx0, gx1, vl), gx2, vl);
             
@@ -96,7 +93,6 @@ void compute_sobel_gradients_rvv(const uint8_t* src, int width, int height, int1
             vint16m4_t gy1 = __riscv_vsub_vv_i16m4(p21, p01, vl);
             vint16m4_t gy2 = __riscv_vsub_vv_i16m4(p22, p02, vl);
             
-            // Multiply by 2 using a left shift (<< 1)
             gy1 = __riscv_vsll_vx_i16m4(gy1, 1, vl);
             vint16m4_t v_gy = __riscv_vadd_vv_i16m4(__riscv_vadd_vv_i16m4(gy0, gy1, vl), gy2, vl);
             
